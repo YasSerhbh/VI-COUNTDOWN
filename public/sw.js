@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gta-vi-countdown-v4';
+const CACHE_NAME = 'gta-vi-countdown-v5';
 
 const STATIC_ASSETS = [
   '/',
@@ -6,9 +6,12 @@ const STATIC_ASSETS = [
   '/bg-mobile.jpg',
   '/VI.png',
   '/icon.png',
+  '/apple-touch-icon.png',
   '/gta-vi-logo.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/icons/icon-maskable-192.png',
+  '/icons/icon-maskable-512.png',
   '/manifest.webmanifest',
 ];
 
