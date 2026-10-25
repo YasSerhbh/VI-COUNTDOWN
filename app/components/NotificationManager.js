@@ -40,10 +40,56 @@ function addFiredMilestone(key) {
   }
 }
 
+/**
+ * Robust cross-device notification dispatcher.
+ * Prioritizes ServiceWorkerRegistration.showNotification (required on Android & iOS PWA)
+ * with graceful fallback to new Notification() constructor (desktop browsers).
+ */
+async function sendNotification(title, options = {}) {
+  if (typeof window === 'undefined' || !('Notification' in window)) return false;
+  if (Notification.permission !== 'granted') return false;
+
+  const notificationOptions = {
+    icon: '/icon.png',
+    badge: '/icon.png',
+    vibrate: [200, 100, 200],
+    ...options,
+  };
+
+  // 1. Try Service Worker showNotification with 800ms race fallback
+  if ('serviceWorker' in navigator) {
+    try {
+      const swReadyPromise = navigator.serviceWorker.ready;
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('SW timeout')), 800)
+      );
+      const reg = await Promise.race([swReadyPromise, timeoutPromise]);
+      if (reg && reg.showNotification) {
+        await reg.showNotification(title, notificationOptions);
+        return true;
+      }
+    } catch {
+      // Fall through to window Notification constructor
+    }
+  }
+
+  // 2. Direct Notification constructor fallback (standard desktop browsers)
+  try {
+    const notif = new Notification(title, notificationOptions);
+    if (!options.requireInteraction) {
+      setTimeout(() => notif.close(), 7000);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function NotificationManager({ releaseDate }) {
   const [permission, setPermission] = useState('default');
   const [enabled, setEnabled] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [testStatus, setTestStatus] = useState('idle'); // 'idle' | 'sending' | 'sent' | 'blocked' | 'error'
 
   // Initialize client-side state
   useEffect(() => {
@@ -52,6 +98,14 @@ export default function NotificationManager({ releaseDate }) {
       setPermission(Notification.permission);
       const settings = getSettings();
       setEnabled(settings.enabled && Notification.permission === 'granted');
+
+      // Expose console helper for testing from DevTools on any device
+      window.__testGtaNotification = (customText) => {
+        return sendNotification('GTA VI Alert Test 🌴', {
+          body: customText || 'This is a test notification from GTA VI Countdown! Notifications are working properly.',
+          tag: `gta6-manual-test-${Date.now()}`,
+        });
+      };
     }
   }, []);
 
@@ -59,7 +113,7 @@ export default function NotificationManager({ releaseDate }) {
   useEffect(() => {
     if (!enabled || !mounted) return;
 
-    const checkMilestones = () => {
+    const checkMilestones = async () => {
       const now = Date.now();
       const remaining = releaseDate.getTime() - now;
       const fired = getFiredMilestones();
@@ -70,18 +124,11 @@ export default function NotificationManager({ releaseDate }) {
         const targetMs = milestoneToMs(m);
         if (remaining <= targetMs) {
           addFiredMilestone(m.key);
-          try {
-            const notif = new Notification(m.label, {
-              body: m.desc,
-              icon: '/icon.png',
-              badge: '/icon.png',
-              tag: `gta6-${m.key}`,
-              requireInteraction: m.key === 'launch',
-            });
-            if (m.key !== 'launch') {
-              setTimeout(() => notif.close(), 9000);
-            }
-          } catch { /* silent */ }
+          await sendNotification(m.label, {
+            body: m.desc,
+            tag: `gta6-${m.key}`,
+            requireInteraction: m.key === 'launch',
+          });
         }
       }
     };
@@ -102,14 +149,10 @@ export default function NotificationManager({ releaseDate }) {
         if (result === 'granted') {
           setEnabled(true);
           saveSettings({ enabled: true });
-          try {
-            const notif = new Notification('Launch Alerts Activated 🌴', {
-              body: 'You\'ll be notified as release milestones approach and when GTA VI launches!',
-              icon: '/icon.png',
-              tag: 'gta6-activated',
-            });
-            setTimeout(() => notif.close(), 6000);
-          } catch { /* silent */ }
+          await sendNotification('Launch Alerts Activated 🌴', {
+            body: "You'll be notified as release milestones approach and when GTA VI launches!",
+            tag: 'gta6-activated',
+          });
         }
       } else if (Notification.permission === 'granted') {
         setEnabled(true);
@@ -120,6 +163,41 @@ export default function NotificationManager({ releaseDate }) {
       saveSettings({ enabled: false });
     }
   }, [enabled]);
+
+  // Dedicated test notification trigger
+  const handleTestAlert = useCallback(async () => {
+    if (!('Notification' in window)) return;
+
+    let perm = Notification.permission;
+    if (perm === 'default') {
+      perm = await Notification.requestPermission();
+      setPermission(perm);
+      if (perm === 'granted') {
+        setEnabled(true);
+        saveSettings({ enabled: true });
+      }
+    }
+
+    if (perm !== 'granted') {
+      setTestStatus('blocked');
+      setTimeout(() => setTestStatus('idle'), 3500);
+      return;
+    }
+
+    setTestStatus('sending');
+    const success = await sendNotification('GTA VI Alert Test 🌴', {
+      body: 'Notifications are live! You will be alerted when pre-load opens and when GTA VI officially launches.',
+      tag: `gta6-test-${Date.now()}`,
+    });
+
+    if (success) {
+      setTestStatus('sent');
+      setTimeout(() => setTestStatus('idle'), 3000);
+    } else {
+      setTestStatus('error');
+      setTimeout(() => setTestStatus('idle'), 3500);
+    }
+  }, []);
 
   if (!mounted) return null;
 
@@ -183,25 +261,60 @@ export default function NotificationManager({ releaseDate }) {
                   : isDenied
                   ? 'Notifications are blocked in your browser settings. Unblock in site settings to enable.'
                   : enabled
-                  ? 'You\'ll receive push alerts at key countdown milestones and the instant GTA VI launches.'
+                  ? "You'll receive push alerts at key countdown milestones and the instant GTA VI launches."
                   : 'Get notified when major countdown milestones hit and when Vice City officially opens.'}
               </span>
             </div>
           </div>
 
-          <button
-            className={`notif-toggle ${enabled ? 'notif-toggle--on' : ''}`}
-            onClick={handleToggle}
-            disabled={!isSupported || isDenied}
-            id="notification-toggle-btn"
-            aria-label={enabled ? 'Disable launch alerts' : 'Enable launch alerts'}
-          >
-            <span className="notif-toggle__track">
-              <span className="notif-toggle__thumb" />
-            </span>
-          </button>
+          <div className="notif-card__actions">
+            {isSupported && !isDenied && (
+              <button
+                type="button"
+                className={`notif-test-btn ${
+                  testStatus === 'sent'
+                    ? 'notif-test-btn--success'
+                    : testStatus === 'blocked' || testStatus === 'error'
+                    ? 'notif-test-btn--warn'
+                    : ''
+                }`}
+                onClick={handleTestAlert}
+                id="notification-test-btn"
+                title="Send a live test notification to verify your device settings"
+                disabled={testStatus === 'sending'}
+              >
+                {testStatus === 'sending' ? (
+                  <span>Sending...</span>
+                ) : testStatus === 'sent' ? (
+                  <span>✓ Alert Sent!</span>
+                ) : testStatus === 'blocked' ? (
+                  <span>⚠️ Blocked</span>
+                ) : testStatus === 'error' ? (
+                  <span>⚠️ Failed</span>
+                ) : (
+                  <>
+                    <span aria-hidden="true">⚡</span>
+                    <span>Test Alert</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            <button
+              className={`notif-toggle ${enabled ? 'notif-toggle--on' : ''}`}
+              onClick={handleToggle}
+              disabled={!isSupported || isDenied}
+              id="notification-toggle-btn"
+              aria-label={enabled ? 'Disable launch alerts' : 'Enable launch alerts'}
+            >
+              <span className="notif-toggle__track">
+                <span className="notif-toggle__thumb" />
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </section>
   );
 }
+

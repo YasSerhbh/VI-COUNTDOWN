@@ -83,6 +83,9 @@ const STATIC_STATS = {
   seconds: 0,
 };
 
+const STORAGE_TARGET_KEY = 'gta6-countdown-target';
+const STORAGE_FORMAT_KEY = 'gta6-countdown-format';
+
 export default function CountdownApp() {
   const [mounted, setMounted] = useState(false);
   const [activeTarget, setActiveTarget] = useState('release');
@@ -111,12 +114,60 @@ export default function CountdownApp() {
     prevPreloadRef.current = pt;
   }, []);
 
+  const handleTargetChange = (target) => {
+    setActiveTarget(target);
+    try {
+      localStorage.setItem(STORAGE_TARGET_KEY, target);
+    } catch {
+      /* ignore storage write errors */
+    }
+  };
+
+  const handleFormatModeChange = (mode) => {
+    setFormatMode(mode);
+    try {
+      localStorage.setItem(STORAGE_FORMAT_KEY, mode);
+    } catch {
+      /* ignore storage write errors */
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
+
+    // Restore saved user choices from localStorage
+    try {
+      const savedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
+      if (savedTarget === 'release' || savedTarget === 'preload') {
+        setActiveTarget(savedTarget);
+      }
+      const savedFormat = localStorage.getItem(STORAGE_FORMAT_KEY);
+      if (savedFormat && FORMAT_MODES.some((m) => m.key === savedFormat)) {
+        setFormatMode(savedFormat);
+      }
+    } catch {
+      /* ignore storage access error */
+    }
+
     tick(); // Compute immediately on mount
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [tick]);
+
+  // Synchronize preferences across browser tabs/windows
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === STORAGE_TARGET_KEY && (e.newValue === 'release' || e.newValue === 'preload')) {
+        setActiveTarget(e.newValue);
+      }
+      if (e.key === STORAGE_FORMAT_KEY && FORMAT_MODES.some((m) => m.key === e.newValue)) {
+        setFormatMode(e.newValue);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   // Clean Service Worker registration (prevents stale dev caching)
   useEffect(() => {
@@ -199,7 +250,7 @@ export default function CountdownApp() {
               role="tab"
               aria-selected={activeTarget === 'release'}
               className={`target-tab ${activeTarget === 'release' ? 'target-tab--active' : ''}`}
-              onClick={() => setActiveTarget('release')}
+              onClick={() => handleTargetChange('release')}
               id="tab-release"
             >
               <span className="target-tab__text">Launch</span>
@@ -210,7 +261,7 @@ export default function CountdownApp() {
               role="tab"
               aria-selected={activeTarget === 'preload'}
               className={`target-tab ${activeTarget === 'preload' ? 'target-tab--active' : ''}`}
-              onClick={() => setActiveTarget('preload')}
+              onClick={() => handleTargetChange('preload')}
               id="tab-preload"
             >
               <span className="target-tab__text">Pre-Load</span>
@@ -226,7 +277,7 @@ export default function CountdownApp() {
                 <button
                   key={m.key}
                   className={`mode-tab ${formatMode === m.key ? 'mode-tab--active' : ''}`}
-                  onClick={() => setFormatMode(m.key)}
+                  onClick={() => handleFormatModeChange(m.key)}
                   aria-pressed={formatMode === m.key}
                   id={`mode-tab-${m.key}`}
                 >

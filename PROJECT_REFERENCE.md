@@ -101,6 +101,7 @@ public/
 - All calculations derived from: `targetDate - Date.now()`
 - Memoized unit conversions to avoid unnecessary re-renders
 - Handles edge case: countdown reaches zero → shows "AVAILABLE NOW" celebration
+- **Local Persistence**: Stores user selections in `localStorage` (`gta6-countdown-target` and `gta6-countdown-format`) with cross-tab synchronization
 
 ## Responsive Breakpoints
 - **Mobile**: < 640px — stacked layout, mobile BG, smaller type
