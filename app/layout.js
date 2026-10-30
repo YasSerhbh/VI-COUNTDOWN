@@ -1,4 +1,5 @@
 import { Outfit } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css";
 
 const outfit = Outfit({
@@ -53,6 +54,7 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body>{children}</body>
+      <Analytics />
     </html>
   );
 }
