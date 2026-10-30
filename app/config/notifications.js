@@ -26,7 +26,7 @@ export const DEFAULT_MILESTONES = [
   {
     key: '14d',
     label: '2 Weeks Left',
-    desc: 'Just 14 days until GTA VI! The countdown is getting real. 🔥',
+    desc: 'Just less than 14 days until GTA VI! The countdown is getting real. 🔥',
     daysBeforeLaunch: 14,
     hoursBeforeLaunch: 0,
     icon: '⏳',
@@ -34,7 +34,7 @@ export const DEFAULT_MILESTONES = [
   {
     key: '7d',
     label: '1 Week Left',
-    desc: 'One week until GTA VI drops! Start clearing your schedule. 🎮',
+    desc: 'Less than One week until GTA VI drops! Start clearing your schedule. 🎮',
     daysBeforeLaunch: 7,
     hoursBeforeLaunch: 0,
     icon: '🔥',
@@ -50,7 +50,7 @@ export const DEFAULT_MILESTONES = [
   {
     key: '3d',
     label: '3 Days Left',
-    desc: 'GTA VI arrives in just 3 days! Almost time for Leonida. ⚡',
+    desc: 'GTA VI arrives in less than 3 days! Almost time for Leonida. ⚡',
     daysBeforeLaunch: 3,
     hoursBeforeLaunch: 0,
     icon: '⚡',
@@ -74,7 +74,7 @@ export const DEFAULT_MILESTONES = [
   {
     key: 'launch',
     label: 'IT HAS FINALLY HAPPENED OMG!',
-    desc: 'GTA VI IS HERE, WE HAVE OFFICIALLY ENTERED A NEw ERA! 🎉',
+    desc: 'GTA VI IS HERE, WE HAVE OFFICIALLY ENTERED A NEW ERA! 🎉',
     daysBeforeLaunch: 0,
     hoursBeforeLaunch: 0,
     icon: '🎉',
