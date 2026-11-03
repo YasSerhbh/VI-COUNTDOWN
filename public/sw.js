@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gta-vi-countdown-v5';
+const CACHE_NAME = 'gta-vi-countdown-v6';
 
 const STATIC_ASSETS = [
   '/',

@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import CountdownTimer from './CountdownTimer';
 import CountdownStats from './CountdownStats';
 import ProgressBar from './ProgressBar';
 import ParticleEffect from './ParticleEffect';
 import InstallPrompt from './InstallPrompt';
-import NotificationManager from './NotificationManager';
+import NotificationManager, { sendNotification } from './NotificationManager';
+import PreloadNotificationToast from './PreloadNotificationToast';
 
 // GTA VI release: November 19, 2026
 const RELEASE_DATE = new Date('2026-11-19T00:00:00');
-// Pre-load date: November 12, 2026 (approx 1 week before launch)
-const PRELOAD_DATE = new Date('2026-11-12T00:00:00');
+// Pre-load date: November 10, 2026 at 00:00 local time (officially confirmed)
+const PRELOAD_DATE = new Date('2026-11-10T00:00:00');
 // Announcement date (trailer 1): December 5, 2023
 const ANNOUNCE_DATE = new Date('2023-12-05T00:00:00');
 
@@ -93,25 +94,33 @@ export default function CountdownApp() {
 
   const [releaseTime, setReleaseTime] = useState(STATIC_TIME);
   const [preloadTime, setPreloadTime] = useState(STATIC_TIME);
+  const [prevReleaseTime, setPrevReleaseTime] = useState(STATIC_TIME);
+  const [prevPreloadTime, setPrevPreloadTime] = useState(STATIC_TIME);
+
   const [progress, setProgress] = useState(0);
 
   const [releaseStats, setReleaseStats] = useState(STATIC_STATS);
   const [preloadStats, setPreloadStats] = useState(STATIC_STATS);
-
-  const prevReleaseRef = useRef(STATIC_TIME);
-  const prevPreloadRef = useRef(STATIC_TIME);
+  const [hasNotifPermission, setHasNotifPermission] = useState(false);
 
   const tick = useCallback(() => {
     const now = Date.now();
     const rt = calcCountdownWithNow(RELEASE_DATE, now);
     const pt = calcCountdownWithNow(PRELOAD_DATE, now);
-    setReleaseTime(rt);
-    setPreloadTime(pt);
+
+    setReleaseTime((prev) => {
+      setPrevReleaseTime(prev);
+      return rt;
+    });
+
+    setPreloadTime((prev) => {
+      setPrevPreloadTime(prev);
+      return pt;
+    });
+
     setProgress(calcProgressWithNow(now));
     setReleaseStats(calcAllStats(rt.total));
     setPreloadStats(calcAllStats(pt.total));
-    prevReleaseRef.current = rt;
-    prevPreloadRef.current = pt;
   }, []);
 
   const handleTargetChange = (target) => {
@@ -132,26 +141,58 @@ export default function CountdownApp() {
     }
   };
 
-  useEffect(() => {
-    setMounted(true);
-
-    // Restore saved user choices from localStorage
-    try {
-      const savedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
-      if (savedTarget === 'release' || savedTarget === 'preload') {
-        setActiveTarget(savedTarget);
+  const handleEnableAlertsFromToast = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const result = await Notification.requestPermission();
+        if (result === 'granted') {
+          setHasNotifPermission(true);
+          try {
+            localStorage.setItem('gta6-notif-settings', JSON.stringify({ enabled: true }));
+          } catch {
+            /* ignore */
+          }
+          await sendNotification('🚨 Launch & Pre-Load Alerts Active!', {
+            body: 'You will receive alerts for pre-load on November 10 (00:00) and launch day!',
+            tag: 'gta6-activated',
+          });
+        }
+      } catch {
+        /* ignore */
       }
-      const savedFormat = localStorage.getItem(STORAGE_FORMAT_KEY);
-      if (savedFormat && FORMAT_MODES.some((m) => m.key === savedFormat)) {
-        setFormatMode(savedFormat);
-      }
-    } catch {
-      /* ignore storage access error */
     }
+  };
 
-    tick(); // Compute immediately on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMounted(true);
+
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        setHasNotifPermission(Notification.permission === 'granted');
+      }
+
+      // Restore saved user choices from localStorage
+      try {
+        const savedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
+        if (savedTarget === 'release' || savedTarget === 'preload') {
+          setActiveTarget(savedTarget);
+        }
+        const savedFormat = localStorage.getItem(STORAGE_FORMAT_KEY);
+        if (savedFormat && FORMAT_MODES.some((m) => m.key === savedFormat)) {
+          setFormatMode(savedFormat);
+        }
+      } catch {
+        /* ignore storage access error */
+      }
+
+      tick();
+    }, 0);
+
     const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(id);
+    };
   }, [tick]);
 
   // Synchronize preferences across browser tabs/windows
@@ -173,9 +214,9 @@ export default function CountdownApp() {
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       if (process.env.NODE_ENV === 'production') {
-        navigator.serviceWorker
-          .register('/sw.js')
-          .catch(() => { /* Silent fallback */ });
+        navigator.serviceWorker.register('/sw.js').catch(() => {
+          /* Silent fallback */
+        });
       } else {
         // In local development, unregister old workers so hot reloading and background images aren't blocked
         navigator.serviceWorker.getRegistrations().then((registrations) => {
@@ -197,7 +238,7 @@ export default function CountdownApp() {
   const isMainTargetRelease = activeTarget === 'release';
   const mainTime = isMainTargetRelease ? releaseTime : preloadTime;
   const mainStats = isMainTargetRelease ? releaseStats : preloadStats;
-  const mainPrevTime = isMainTargetRelease ? prevReleaseRef.current : prevPreloadRef.current;
+  const mainPrevTime = isMainTargetRelease ? prevReleaseTime : prevPreloadTime;
 
   return (
     <>
@@ -217,6 +258,13 @@ export default function CountdownApp() {
       {/* Ambient Particle Canvas */}
       <ParticleEffect />
 
+      {/* Breaking Notification Toast (Triggers immediately on visit) */}
+      <PreloadNotificationToast
+        onSwitchToPreload={() => handleTargetChange('preload')}
+        onEnableAlerts={handleEnableAlertsFromToast}
+        notificationsEnabled={hasNotifPermission}
+      />
+
       {/* Main layout */}
       <main className="content-wrapper">
         {/* ========================================================= */}
@@ -229,6 +277,24 @@ export default function CountdownApp() {
               <span className="hero__badge-dot" />
               {mainTime.isReached ? 'AVAILABLE NOW' : 'OFFICIAL COUNTDOWN'}
             </div>
+
+            {/* Breaking News Pill Button */}
+            <button
+              type="button"
+              className="hero__update-pill"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.__showPreloadAnnouncement) {
+                  window.__showPreloadAnnouncement();
+                }
+              }}
+              title="Click to view confirmed pre-load announcement"
+              aria-label="View pre-load date announcement"
+            >
+              <span className="hero__update-pill-beacon" />
+              <span className="hero__update-pill-tag">OFFICIAL UPDATE</span>
+              <span className="hero__update-pill-text">Pre-Load Confirmed: Nov 10, 00:00</span>
+              <span className="hero__update-pill-arrow">›</span>
+            </button>
 
             {/* Official Transparent VI.png Logo */}
             <div className="hero__logo-wrapper">
@@ -265,7 +331,7 @@ export default function CountdownApp() {
               id="tab-preload"
             >
               <span className="target-tab__text">Pre-Load</span>
-              <span className="target-tab__date">Nov 12, 2026</span>
+              <span className="target-tab__date">Nov 10, 2026</span>
             </button>
           </div>
 
@@ -308,10 +374,10 @@ export default function CountdownApp() {
                 title={
                   isMainTargetRelease
                     ? 'Target: Official Global Launch'
-                    : 'Target: Estimated Pre-Load Window'
+                    : 'Target: Officially Confirmed Pre-Load'
                 }
                 targetDateLabel={
-                  isMainTargetRelease ? 'November 19, 2026' : 'November 12, 2026'
+                  isMainTargetRelease ? 'November 19, 2026' : 'November 10, 2026 (00:00)'
                 }
                 isMounted={mounted}
               />
@@ -345,12 +411,12 @@ export default function CountdownApp() {
               </span>
               <h2 className="section-header__title">
                 {isMainTargetRelease
-                  ? 'Pre-Load Clock (November 12, 2026)'
+                  ? 'Pre-Load Clock (November 10, 2026)'
                   : 'Official Launch Clock (November 19, 2026)'}
               </h2>
               <p className="section-header__sub">
                 {isMainTargetRelease
-                  ? 'Pre-load unlocks 1 week before release so you are ready to jump straight into Leonida.'
+                  ? 'Officially confirmed for November 10 at 00:00 local time — 9 days before launch so you have plenty of time to download and be ready for Leonida.'
                   : 'November 19, 2026 — Vice City awaits.'}
               </p>
             </div>
@@ -359,11 +425,11 @@ export default function CountdownApp() {
               mode="all"
               time={isMainTargetRelease ? preloadTime : releaseTime}
               stats={isMainTargetRelease ? preloadStats : releaseStats}
-              prevTime={isMainTargetRelease ? prevPreloadRef.current : prevReleaseRef.current}
+              prevTime={isMainTargetRelease ? prevPreloadTime : prevReleaseTime}
               variant={isMainTargetRelease ? 'teal' : 'pink'}
               title={
                 isMainTargetRelease
-                  ? 'Pre-Load Date: November 12, 2026'
+                  ? 'Pre-Load Date: November 10, 2026 (00:00)'
                   : 'Official Launch: November 19, 2026'
               }
               isMounted={mounted}
@@ -396,8 +462,8 @@ export default function CountdownApp() {
                 <span className="release-info__value">November 19, 2026</span>
               </div>
               <div className="release-info__item">
-                <span className="release-info__label">Pre-Load Est.</span>
-                <span className="release-info__value">November 12, 2026</span>
+                <span className="release-info__label">Pre-Load (Confirmed)</span>
+                <span className="release-info__value">November 10, 2026 (00:00)</span>
               </div>
               <div className="release-info__item">
                 <span className="release-info__label">Platforms</span>
@@ -429,7 +495,8 @@ export default function CountdownApp() {
               Offline capable PWA &bull; Updates dynamically in real-time
               <br />
               <span className="footer__disclaimer">
-                Fan-made tribute. Not affiliated with, endorsed by, or sponsored by Rockstar Games or Take-Two Interactive.
+                Fan-made tribute. Not affiliated with, endorsed by, or sponsored by Rockstar Games or
+                Take-Two Interactive.
               </span>
             </p>
           </footer>

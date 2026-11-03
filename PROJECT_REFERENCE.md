@@ -6,7 +6,10 @@ A premium, single-page GTA VI countdown website built with Next.js 16. The site 
 ## Release Info
 - **Game**: Grand Theft Auto VI (GTA VI)
 - **Release Date**: November 19, 2026
-- **Target Timestamp**: `2026-11-19T00:00:00` (midnight, user's local timezone)
+- **Release Timestamp**: `2026-11-19T00:00:00` (midnight, user's local timezone)
+- **Pre-Load Date**: November 10, 2026 (00:00 local time — officially confirmed)
+- **Pre-Load Timestamp**: `2026-11-10T00:00:00` (midnight, user's local timezone, 9 days before launch)
+- **Announcement**: Active in-app and web push announcement notifying visitors of official pre-load date confirmation
 
 ## Tech Stack
 - **Framework**: Next.js 16.4.2 (App Router)
@@ -83,6 +86,10 @@ app/
     ProgressBar.js    — Time elapsed progress visualization
     ParticleEffect.js — Background particle/shimmer animation
     InstallPrompt.js  — PWA install button
+    NotificationManager.js — Web push notification manager & milestone schedule
+    PreloadNotificationToast.js — Official pre-load date confirmation in-app notification toast
+  config/
+    notifications.js   — Central configuration for all launch & pre-load milestone notifications
 public/
   bg-desktop.jpg     — Vice City desktop background (16:9)
   bg-mobile.jpg      — Vice City mobile background (9:16)
